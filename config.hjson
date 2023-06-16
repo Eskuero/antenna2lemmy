@@ -1,0 +1,21 @@
+{
+	"script-options": {
+		# Maximum number of concurrent posts to create. A number too great might overload your instance without proper rate limits
+		"threads": 10
+	},
+	"lemmy-conn": {
+		# Hostname where Lemmy is located
+		"host": "localhost",
+		# User credentiales that will make all the posts
+		"user": "archive_bot",
+		"password": "password",
+		# Protocol to connect. Keep https unless is a local instance
+		"protocol": "http",
+		# Community target to post the content to
+		"community": "personal"
+	},
+	"origin-conn": {
+		# How the requests will be identified to the origin
+		"user-agent": "origin-to-lemmy v0.2"
+	}
+}

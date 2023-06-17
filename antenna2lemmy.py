@@ -219,7 +219,7 @@ def migratemedia(originurl):
 		# Store videos temporarily
 		if ("v.redd.it" in originurl):
 			# Disable audio
-			filename = "temp/" + str(time.time()) + ".mp4"
+			filename = "temp/" + originurl.replace("/","") + ".mp4"
 			yt_opts = {
 				'outtmpl': filename,
 				'quiet': True,

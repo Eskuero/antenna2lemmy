@@ -79,15 +79,6 @@ except:
 	print("Failed to get community ID for " + COMMUNITY_NAME + ", are you sure it exists?")
 	sys.exit(1)
 
-# Curses related variables
-interfacevars = {
-	"migrated_posts": 0,
-	"failed_posts": 0,
-	"migrated_media": 0,
-	"failed_media": 0,
-	"error_output": ""
-}
-
 def main():
 	# Do the migration of the posts asynchronously
 	for url in urls:
@@ -265,12 +256,11 @@ def migratemedia(originurl):
 			return newurl
 
 def log(message, level):
-	global interfacevars
 	if DEBUGMODE:
 		print(message)
-	# Add extra line to make it more readable on log and curses
-	message += "'\n"
-	interfacevars['error_output'] += message
+	else:
+		global interfacevars
+		interfacevars['error_output'] += message + "'\n"
 	match level:
 		case "error":
 			logger.error(message)
@@ -280,8 +270,9 @@ def log(message, level):
 			logger.info(message)
 
 def updatecounter(target):
-	global interfacevars
-	interfacevars[target] += 1
+	if not DEBUGMODE:
+		global interfacevars
+		interfacevars[target] += 1
 
 def rendercurses():
 	# Clear the screen
@@ -331,6 +322,14 @@ def rendercurses():
 if DEBUGMODE:
 	main()
 else:
+	# Curses related variables
+	interfacevars = {
+		"migrated_posts": 0,
+		"failed_posts": 0,
+		"migrated_media": 0,
+		"failed_media": 0,
+		"error_output": ""
+	}
 	# Initialize the curses screen
 	stdscr = curses.initscr()
 

@@ -101,7 +101,7 @@ def migratepost(url, COMMUNITY_ID):
 		# Actually the post data is deeper in
 		postdata = page[0]["data"]["children"][0]["data"]
 	except:
-		log("Unexpected data while getting post content. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
+		log("Unexpected data. op: 'Downloading post', url: '" + url + "', response: '" + response.text, "error")
 		updatecounter('failed_posts')
 		return
 
@@ -122,7 +122,7 @@ def migratepost(url, COMMUNITY_ID):
 			page = response.json()
 			postdata = page[0]["data"]["children"][0]["data"]
 	except:
-		log("Unexpected data while recursing parent crosspost. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
+		log("Unexpected data. op: 'Recursing crosspost', url: '" + url + "', response: '" + response.text, "error")
 		updatecounter('failed_posts')
 		return
 
@@ -155,28 +155,28 @@ def migratepost(url, COMMUNITY_ID):
 		response = requests.post(url = BASE_API + "/post", json = payload)
 		POST_ID = response.json()["post_view"]["post"]["id"]
 	except json.decoder.JSONDecodeError:
-		log("Unexpected data on POST request to Lemmy. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
+		log("Unexpected data. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
 		updatecounter('failed_posts')
 	except KeyError:
 		# If we failed with anything other than rate limit skip this one.
 		if response.json().get("error", "ok") != "rate_limit_error":
-			log("Failed POST request to Lemmy. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
+			log("Failed. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
 			updatecounter('failed_posts')
 			return
 		# If we are rate limited retry in timeouts of 30 seconds
 		while (response.json().get("error", "ok") == "rate_limit_error"):
-			log("Timed out on POST request to Lemmy. Waiting 30 seconds before retry.", "warning")
+			log("Timed out and waiting 30 seconds. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "warning")
 			time.sleep(30)
 			response = requests.post(url = BASE_API + "/post", json = payload)
 		# We should only be here if we didn't get an error of rate limit anymore
 		POST_ID = response.json()["post_view"]["post"]["id"]
 	except:
-		log("Failed POST request to lemmy. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
+		log("Failed. op: 'Migrating post', url: '" + url + "', response: '" + response.text, "error")
 		updatecounter('failed_posts')
 		return
 
 	# If we are here congratz, we successfully migrated a post
-	log("Succesful post migration to lemmy. url: '" + url, "info")
+	log("Successful. op: 'Migrating post', url: '" + url, "info")
 	updatecounter('migrated_posts')
 
 def preparebody(author, date, content):
@@ -232,7 +232,8 @@ def migratemedia(originurl):
 			response = requests.get(originurl)
 			media = {'images[]': io.BytesIO(response.content)}
 	except:
-		log("Failed downloading media. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+		# FIXME: Proper error reporting from yt-dlp?
+		log("Failed. op: 'Downloading media', url: '" + originurl + "'", "error")
 		updatecounter('failed_media')
 		return False
 	else:
@@ -243,10 +244,37 @@ def migratemedia(originurl):
 		try:
 			response = requests.post(url = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image", cookies = cookies, files = media)
 			newurl = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image/" + response.json()["files"][0]["file"]
-		except:
-			log("Failed migrating media. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+		except json.decoder.JSONDecodeError:
+			log("Failed. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
 			updatecounter('failed_media')
 			return False
+		except KeyError:
+			# If we failed with anything other than rate limit skip this one.
+			if response.json().get("error", "ok") != "rate_limit_error":
+				log("Failed. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+				updatecounter('failed_media')
+				return False
+			# If we are rate limited retry in timeouts of 30 seconds
+			while (response.json().get("error", "ok") == "rate_limit_error"):
+				log("Timed out and waiting 30 seconds. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "warning")
+				time.sleep(30)
+				try:
+					response = requests.post(url = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image", cookies = cookies, files = media)
+					newurl = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image/" + response.json()["files"][0]["file"]
+				# If we failed without rate limit again we break this loop and stop trying
+				except KeyError:
+					if response.json().get("error", "ok") != "rate_limit_error":
+						log("Failed. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+						interfacevars['failed_media'] += 1
+						return False
+				except:
+					log("Failed. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+					interfacevars['failed_media'] += 1
+					return False
+		except:
+			log("Failed. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text, "error")
+			updatecounter('failed_media')
+			return
 		else:
 			updatecounter('migrated_media')
 			# Delete temporal video from filesystem

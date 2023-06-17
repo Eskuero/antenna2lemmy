@@ -68,6 +68,17 @@ except:
 	print("Failed to authenticate: " + response.text)
 	sys.exit(1)
 
+# Get community ID because we cannot target by name in API
+payload = {
+	'auth': AUTH,
+	'name': COMMUNITY_NAME
+}
+try:
+	COMMUNITY_ID = requests.get(url = BASE_API + "/community", params = payload).json()["community_view"]["community"]["id"]
+except:
+	print("Failed to get community ID for " + COMMUNITY_NAME + ", are you sure it exists?")
+	sys.exit(1)
+
 # Curses related variables
 interfacevars = {
 	"migrated_posts": 0,
@@ -78,13 +89,6 @@ interfacevars = {
 }
 
 def main():
-	# Get community ID because we cannot target by name in the lemmy API
-	payload = {
-		'auth': AUTH,
-		'name': COMMUNITY_NAME
-	}
-	COMMUNITY_ID = requests.get(url = BASE_API + "/community", params = payload).json()["community_view"]["community"]["id"]
-
 	# Do the migration of the posts asynchronously
 	for url in urls:
 		# NOTICE: Limit posting threads to not overload the instance

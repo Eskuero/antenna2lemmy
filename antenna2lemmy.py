@@ -260,14 +260,15 @@ def log(message, level):
 		print(message)
 	else:
 		global interfacevars
-		interfacevars['error_output'] += message + "'\n"
+		# Save for curses output, remove all newlines and carriage returns that blow it up beforehand
+		interfacevars['error_output'].append(message.replace("\r\n",""))
 	match level:
 		case "error":
-			logger.error(message)
+			logger.error(message + "\n")
 		case "warning":
-			logger.warning(message)
+			logger.warning(message + "\n")
 		case "info":
-			logger.info(message)
+			logger.info(message + "\n")
 
 def updatecounter(target):
 	if not DEBUGMODE:
@@ -303,12 +304,19 @@ def rendercurses():
 	second_section_height = screen_height - first_section_height
 
 	# Print the updated text in the second section
-	text_lines = interfacevars['error_output'].splitlines()
 	max_rows = second_section_height - 2  # Leave one row for the border
-	text_to_print = text_lines[-max_rows:]  # Get the last portion of the text
+	text_to_print = interfacevars['error_output'][-max_rows:]  # Get the last portion of the text
 	for i, line in enumerate(text_to_print):
 		try:
-			stdscr.addstr(i + first_section_height + 1, 0, line)
+			match line[:6]:
+				case "Succes":
+					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(1))
+				case "Failed":
+					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(2))
+				case "Unexpe":
+					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(2))
+				case "Timed ":
+					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(4))
 		except:
 			# FIXME: Don't crash if curses fails to print the line, just check the log so see the problem
 			pass
@@ -328,7 +336,7 @@ else:
 		"failed_posts": 0,
 		"migrated_media": 0,
 		"failed_media": 0,
-		"error_output": ""
+		"error_output": []
 	}
 	# Initialize the curses screen
 	stdscr = curses.initscr()

@@ -3,12 +3,16 @@ import requests
 import time
 import datetime
 import sys
+import json
 import hjson
 import html
 import time
 import threading
 import curses
 import logging
+import io
+import yt_dlp
+import os
 
 logging.basicConfig(filename='migration.log', encoding='utf-8', level=logging.INFO, filemode="w")
 logger = logging.getLogger(__name__)
@@ -29,7 +33,10 @@ ORIGINHEADERS = {
 	'User-agent': config["origin-conn"]["user-agent"]
 }
 BASE_API = PROTOCOL + "://" + LEMMYHOST + "/api/v3"
+
+# Runtime options
 MAXTHREADS = config["script-options"]["threads"]
+MIGRATE_MEDIA = config["script-options"]["migratemedia"]
 
 # Expand config values for this particular migration
 COMMUNITY_NAME = config["lemmy-conn"]["community"]
@@ -63,6 +70,8 @@ except:
 interfacevars = {
 	"migrated_posts": 0,
 	"failed_posts": 0,
+	"migrated_media": 0,
+	"failed_media": 0,
 	"error_output": ""
 }
 
@@ -134,6 +143,13 @@ def migratepost(url, COMMUNITY_ID):
 	# If selftest, actually append the rest of the post body now
 	if postdata["is_self"]:
 		payload["body"] = preparebody(postdata["author"], postdata["created_utc"], postdata["selftext"])
+	# Migrate pictures if asked
+	if MIGRATE_MEDIA and payload["url"]:
+		# Only expand that site hosted stuff
+		if any(substring in payload["url"] for substring in ["i.redd.it", "v.redd.it"]):
+			migration = migratemedia(payload["url"])
+			# If migration of the media failed we keep the original link
+			payload["url"] = payload["url"] if not migration else migration
 
 	# Actually create the post
 	try:
@@ -178,15 +194,67 @@ def preparebody(author, date, content):
 	for index in matching:
 		# If the url starts with [ simply add the !
 		if lines[index][0] == "[":
-			content = content.replace(lines[index], "!" + lines[index])
+			newstring = "!" + lines[index]
 		# If we only have the url add a basic text
 		elif lines[index][0:4] == "http":
-			content = content.replace(lines[index], "![Image](" + lines[index] + ")")
+			newstring = "![Image](" + lines[index] + ")"
+
+		# If we set the script to replace image links, do so
+		if MIGRATE_MEDIA and newstring:
+			# Download original url
+			originurl = newstring.split("(")[1].rstrip(")")
+			migration = migratemedia(originurl)
+			# If migration of the picture failed we keep the original link
+			newstring = newstring if not migration else ("![Image](" + migration + ")")
+
+		# Replace the original line with this.
+		content = content.replace(lines[index], newstring)
 
 	body = credits + content
 
 	# FIXME: Body cannot be longer than 10.000k characters, alternate solution to not lose data?
 	return body[0:9999]
+
+def migratemedia(originurl):
+	try:
+		# Store videos temporarily
+		if ("v.redd.it" in originurl):
+			# Disable audio
+			filename = "temp/" + str(time.time()) + ".mp4"
+			yt_opts = {
+				'outtmpl': filename,
+				'quiet': True,
+				'noprogress': True
+			}
+			with yt_dlp.YoutubeDL(yt_opts) as ydl:
+				ydl.download([originurl])
+			media = {'images[]': open(filename,'rb')}
+		elif any(substring in originurl for substring in ["i.redd.it", "preview.redd.it"]):
+			response = requests.get(originurl)
+			media = {'images[]': io.BytesIO(response.content)}
+	except:
+		log("Failed downloading media. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text + "'\n")
+		updatecounter('failed_media')
+		return False
+	else:
+		# For uploading the picture we need an AUTH
+		cookies = {
+			'jwt': AUTH
+		}
+		try:
+			response = requests.post(url = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image", cookies = cookies, files = media)
+			newurl = PROTOCOL + "://" + LEMMYHOST + "/pictrs/image/" + response.json()["files"][0]["file"]
+		except:
+			log("Failed migrating media. op: 'Migrating media', url: '" + originurl + "', response: '" + response.text + "'\n")
+			updatecounter('failed_media')
+			return False
+		else:
+			updatecounter('migrated_media')
+			# Delete temporal video from filesystem
+			if "v.redd.it" in originurl:
+				if os.path.exists(filename):
+					os.remove(filename)
+			return newurl
 
 def log(message):
 	global interfacevars
@@ -205,7 +273,9 @@ def rendercurses():
 	stdscr.addstr(0, 0, f"Migrating links from {ORIGIN} into community !{COMMUNITY_NAME}@{LEMMYHOST}", curses.color_pair(3))
 	stdscr.hline(1, 0, curses.ACS_HLINE, screen_width)
 	stdscr.addstr(2, 0, f"Posts migrated: {interfacevars['migrated_posts']}", curses.color_pair(1))
-	stdscr.addstr(2, 40, f"Failed posts: {interfacevars['failed_posts']}", curses.color_pair(2))
+	stdscr.addstr(2, 30, f"Failed posts: {interfacevars['failed_posts']}", curses.color_pair(2))
+	stdscr.addstr(3, 0, f"Media migrated: {interfacevars['migrated_media']}", curses.color_pair(1))
+	stdscr.addstr(3, 30, f"Failed media: {interfacevars['failed_media']}", curses.color_pair(2))
 
 	# Calculate the days, hours, minutes, and seconds
 	current_time = time.time()
@@ -216,9 +286,9 @@ def rendercurses():
 	minutes, seconds = divmod(remainder, 60)
 
 	# Print the current runtime
-	stdscr.addstr(3, 0, f"Runtime: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds.", curses.color_pair(5))
+	stdscr.addstr(4, 0, f"Runtime: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds.", curses.color_pair(5))
 	# Print the current total threads
-	stdscr.addstr(3, 60, f"Threads: {str(len(threading.enumerate()))}", curses.color_pair(4))
+	stdscr.addstr(4, 60, f"Threads: {str(len(threading.enumerate()))}", curses.color_pair(4))
 
 	# Calculate the height for the second section
 	second_section_height = screen_height - first_section_height
@@ -257,7 +327,7 @@ curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 # Calculate the height for the first section (10% of the screen height)
 screen_height, screen_width = stdscr.getmaxyx()
 # Define the height for the first section (4 rows)
-first_section_height = 4
+first_section_height = 5
 
 thread = threading.Thread(target=main, args=(), kwargs={})
 thread.start()

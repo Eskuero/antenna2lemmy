@@ -1,14 +1,16 @@
 {
 	"script-options": {
 		# Maximum number of concurrent posts to create. A number too great might overload your instance without proper rate limits
-		"threads": 10
+		"threads": 10,
+		# Whether to parse and reupload media
+		"migratemedia": true
 	},
 	"lemmy-conn": {
 		# Hostname where Lemmy is located
 		"host": "localhost",
 		# User credentiales that will make all the posts
 		"user": "archive_bot",
-		"password": "password",
+		"password": "password96",
 		# Protocol to connect. Keep https unless is a local instance
 		"protocol": "http",
 		# Community target to post the content to

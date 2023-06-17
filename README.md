@@ -8,7 +8,7 @@ This is provided as-is **without warranty or responsibility** of the usage you m
 Clone this repository with git:
 
     $ git clone https://github.com/Eskuero/antenna2lemmy
-    $ cd reddit2lemmy
+    $ cd antenna2lemmy
 
 You need to modify the **provided sample config.hjson**. It's properly documented with comments. It's easier if you install the dependencies in a virtual environment instead of relying on your distribution packages:
 

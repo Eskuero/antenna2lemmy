@@ -17,6 +17,8 @@ import os
 logging.basicConfig(filename='migration.log', encoding='utf-8', level=logging.INFO, filemode="w")
 logger = logging.getLogger(__name__)
 
+DEBUGMODE = True if os.environ.get("DEBUGMODE", 0) == "1" else False
+
 # Amount of time the program has been running
 start_time = time.time()
 
@@ -88,9 +90,11 @@ def main():
 		# NOTICE: Limit posting threads to not overload the instance
 		while (len(threading.enumerate())) > 10:
 			time.sleep(5)
-		thread = threading.Thread(target = migratepost, args=(url, COMMUNITY_ID), kwargs={})
-		thread.start()
-		#migratepost(url, COMMUNITY_ID)
+		if not DEBUGMODE:
+			thread = threading.Thread(target = migratepost, args=(url, COMMUNITY_ID), kwargs={})
+			thread.start()
+		else:
+			migratepost(url, COMMUNITY_ID)
 
 def migratepost(url, COMMUNITY_ID):
 	url = url + ".json"
@@ -177,7 +181,7 @@ def migratepost(url, COMMUNITY_ID):
 		return
 
 	# If we are here congratz, we successfully migrated a post
-	interfacevars['error_output'] += "Succesful post migration to lemmy. url: '" + url + "'\n"
+	log("Succesful post migration to lemmy. url: '" + url + "'\n")
 	updatecounter('migrated_posts')
 
 def preparebody(author, date, content):
@@ -258,6 +262,8 @@ def migratemedia(originurl):
 
 def log(message):
 	global interfacevars
+	if DEBUGMODE:
+		print(message)
 	interfacevars['error_output'] += message
 	logger.error(message)
 
@@ -310,43 +316,47 @@ def rendercurses():
 	# Refresh the screen
 	stdscr.refresh()
 
-# Initialize the curses screen
-stdscr = curses.initscr()
+if DEBUGMODE:
+	main()
+else:
+	# Initialize the curses screen
+	stdscr = curses.initscr()
 
-# Disable automatic echoing of keys
-curses.noecho()
+	# Disable automatic echoing of keys
+	curses.noecho()
 
-# Define color pairs
-curses.start_color()
-curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
-curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
-curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_BLACK)
-curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+	# Define color pairs
+	curses.start_color()
+	curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+	curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+	curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_BLACK)
+	curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+	curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 
-# Calculate the height for the first section (10% of the screen height)
-screen_height, screen_width = stdscr.getmaxyx()
-# Define the height for the first section (4 rows)
-first_section_height = 5
+	# Calculate the height for the first section (10% of the screen height)
+	screen_height, screen_width = stdscr.getmaxyx()
+	# Define the height for the first section (4 rows)
+	first_section_height = 5
 
-thread = threading.Thread(target=main, args=(), kwargs={})
-thread.start()
+	# Start the migration
+	thread = threading.Thread(target=main, args=(), kwargs={})
+	thread.start()
 
-while True:
-	# If we only have one remaining thread it means we finished and thus can end
-	if (len(threading.enumerate()) == 1):
-		break
+	while True:
+		# If we only have one remaining thread it means we finished and thus can end
+		if (len(threading.enumerate()) == 1):
+			break
+		rendercurses()
+		# Sleep for 1 second
+		time.sleep(1)
+
 	rendercurses()
-	# Sleep for 1 second
-	time.sleep(1)
+	stdscr.addstr(screen_height - 1, 0, "Completed migration, press any key to exit...")
+	stdscr.refresh()
+	stdscr.getch()
 
-rendercurses()
-stdscr.addstr(screen_height - 1, 0, "Completed migration, press any key to exit...")
-stdscr.refresh()
-stdscr.getch()
-
-# End curses and return terminal to normal mode
-curses.nocbreak()
-stdscr.keypad(False)
-curses.echo()
-curses.endwin()
+	# End curses and return terminal to normal mode
+	curses.nocbreak()
+	stdscr.keypad(False)
+	curses.echo()
+	curses.endwin()

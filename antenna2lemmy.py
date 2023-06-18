@@ -37,7 +37,8 @@ ORIGINHEADERS = {
 BASE_API = PROTOCOL + "://" + LEMMYHOST + "/api/v3"
 
 # Runtime options
-MAXTHREADS = config["script-options"]["threads"]
+THREADING = config["script-options"]["threading"]
+MAXTHREADS = config["script-options"]["max_threads"]
 
 # Decisions of media migration
 MIGRATE_PICTURES = config["script-options"]["migrateimages"]
@@ -89,7 +90,7 @@ def main():
 		# NOTICE: Limit posting threads to not overload the instance
 		while (len(threading.enumerate())) > MAXTHREADS:
 			time.sleep(5)
-		if not DEBUGMODE:
+		if not DEBUGMODE and THREADING:
 			thread = threading.Thread(target = migratepost, args=(url, COMMUNITY_ID), kwargs={})
 			thread.start()
 		else:

@@ -2,7 +2,7 @@
 	"script-options": {
 		# Enable threading to increase the amount of posts that are simulneously migrated to Lemmy up to the amount specified by max_threads below
 		# This is useful to first test the output of migration on a local instance without wasting much time.
-		# On production you will get ratelimited out quickly at best and you might incur in more errors when migrating media if pictrs can't keep it.
+		# On production you will get ratelimited quickly at best and at worst you might incur in more errors when migrating media if pictrs can't keep up.
 		"threading": false,
 		# Maximum number of concurrent posts to create. A number too great might overload your instance without proper rate limits
 		"max_threads": 10,
@@ -12,8 +12,8 @@
 		"migratevideos": true,
 		# Whether to skip the post if we failed to migrate media or to the contrary simply keep the old link.
 		"media_skip_on_fail": true
-		# Whether to parse and migrate comments
-		"migratecomments": true
+		# Whether to parse and migrate comments. This will significantly increase runtime
+		"migratecomments": false
 	},
 	"lemmy-conn": {
 		# Hostname where Lemmy is located

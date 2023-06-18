@@ -16,9 +16,9 @@ You need to modify the **provided sample config.hjson**. It's properly documente
     $ . env/bin/activate
     $ pip install -r requirements.txt
 
-Now you need to add as many URL of posts to a text file, one on each new line. Then you can run the program like this:
+Now you need to add as many URL of posts to a text file, one on each new line. Then you can run the program like this where communityname is the name of the target community and links.txt the file containing the links:
 
-    $ python antenna2lemmy links.txt
+    $ python antenna2lemmy communityname,links.txt
 
 ## Todo
 

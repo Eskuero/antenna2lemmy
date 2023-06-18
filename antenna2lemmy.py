@@ -83,7 +83,7 @@ def main():
 	# Do the migration of the posts asynchronously
 	for url in urls:
 		# NOTICE: Limit posting threads to not overload the instance
-		while (len(threading.enumerate())) > 10:
+		while (len(threading.enumerate())) > MAXTHREADS:
 			time.sleep(5)
 		if not DEBUGMODE:
 			thread = threading.Thread(target = migratepost, args=(url, COMMUNITY_ID), kwargs={})

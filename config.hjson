@@ -2,8 +2,12 @@
 	"script-options": {
 		# Maximum number of concurrent posts to create. A number too great might overload your instance without proper rate limits
 		"threads": 10,
-		# Whether to parse and reupload media
-		"migratemedia": true
+		# Whether to parse and reupload pictures
+		"migrateimages": true,
+		# Whether to parse and reupload videos. Lemmy will timeout these requests if pictrs doesn't handle them within 10 seconds.
+		"migratevideos": true,
+		# Whether to skip the post if we failed to migrate media or to the contrary simply keep the old link.
+		"media_skip_on_fail": true
 	},
 	"lemmy-conn": {
 		# Hostname where Lemmy is located

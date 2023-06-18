@@ -38,7 +38,11 @@ BASE_API = PROTOCOL + "://" + LEMMYHOST + "/api/v3"
 
 # Runtime options
 MAXTHREADS = config["script-options"]["threads"]
-MIGRATE_MEDIA = config["script-options"]["migratemedia"]
+
+# Decisions of media migration
+MIGRATE_PICTURES = config["script-options"]["migrateimages"]
+MIGRATE_VIDEOS = config["script-options"]["migratevideos"]
+MEDIA_SKIP_ON_FAIL = config["script-options"]["media_skip_on_fail"]
 
 # Expand config values for this particular migration
 COMMUNITY_NAME = config["lemmy-conn"]["community"]
@@ -137,18 +141,32 @@ def migratepost(url, COMMUNITY_ID):
 		# If the post is not self the URL is null
 		'url': None if postdata["is_self"] else postdata["url"],
 		# The body always starts giving credit to the original poster
-		'body': preparebody(postdata["author"], postdata["created_utc"], ""),
+		'body': ""
 	}
-	# If selftest, actually append the rest of the post body now
-	if postdata["is_self"]:
-		payload["body"] = preparebody(postdata["author"], postdata["created_utc"], postdata["selftext"])
-	# Migrate pictures if asked
-	if MIGRATE_MEDIA and payload["url"]:
+
+	# Migrate media if asked with a proper link
+	if payload["url"]:
 		# Only expand that site hosted stuff
-		if any(substring in payload["url"] for substring in ["i.redd.it", "v.redd.it"]):
+		if (MIGRATE_PICTURES and "i.redd.it" in payload["url"]) or (MIGRATE_VIDEOS and "v.redd.it" in payload["url"]):
 			migration = migratemedia(payload["url"])
-			# If migration of the media failed we keep the original link
-			payload["url"] = payload["url"] if not migration else migration
+			if migration:
+				payload["url"] = migration
+			# If migration of the media failed decide whether to skip this post or keep the old link
+			elif MEDIA_SKIP_ON_FAIL:
+				log("Failed. op: 'Migrating post', url: '" + url + "', response: 'Mandated to skip because migration of " + payload["url"] + " failed'", "error")
+				return
+			else:
+				log("Ignoring failure. op: 'Migrating post', url: '" + url + "', response: 'Mandated to continue despite migration of " + payload["url"] + " failing'", "warning")
+
+	# If selftest, actually append the rest of the post body now doing some cleanups and migrating inline images
+	credits = (postdata["author"], postdata["created_utc"])
+	result, payload["body"] = preparebody(credits, postdata["selftext"]) if postdata["is_self"] else preparebody(credits, "")
+	# A failed report means we are skipping the post because mediadidn't went through
+	if result == "failed":
+		log("Failed. op: 'Migrating post', url: '" + url + "', response: 'Mandated to skip because migration of inline image failed'", "error")
+		return;
+	elif result == "ignore":
+		log("Ignoring failure. op: 'Migrating post', url: '" + url + "', response: 'Mandated to continue despite migration of inline image failing'", "warning")
 
 	# Actually create the post
 	try:
@@ -179,9 +197,12 @@ def migratepost(url, COMMUNITY_ID):
 	log("Successful. op: 'Migrating post', url: '" + url, "info")
 	updatecounter('migrated_posts')
 
-def preparebody(author, date, content):
+def preparebody(credits, content):
 	# Always give credits to the original poster and jump line
-	credits = ">*originally posted by /u/" + author + " on " + str(datetime.datetime.fromtimestamp(date)) + "*\n\n"
+	credits = ">*originally posted by /u/" + credits[0] + " on " + str(datetime.datetime.fromtimestamp(credits[1])) + "*\n\n"
+
+	# To know how preparation went
+	status = "correct"
 
 	# First escape the content received
 	content = html.unescape(content)
@@ -199,17 +220,22 @@ def preparebody(author, date, content):
 			newstring = "![Image](" + lines[index] + ")"
 
 		# If we set the script to replace image links, do so
-		if MIGRATE_MEDIA and newstring:
+		if MIGRATE_PICTURES and newstring:
 			# Download original url
 			originurl = newstring.split("(")[1].rstrip(")")
 			migration = migratemedia(originurl)
-			# If migration of the picture failed we keep the original link
-			newstring = newstring if not migration else ("![Image](" + migration + ")")
+			if migration:
+				newstring = newstring if not migration else ("![Image](" + migration + ")")
+			# If migration of the media failed decide whether to skip this post or keep the old link
+			elif MEDIA_SKIP_ON_FAIL:
+				return "failed", ""
+			else:
+				status = "ignore"
 
 		# Replace the original line with this.
 		content = content.replace(lines[index], newstring)
 
-	body = credits + content
+	body = status, credits + content
 
 	# FIXME: Body cannot be longer than 10.000k characters, alternate solution to not lose data?
 	return body[0:9999]
@@ -344,6 +370,8 @@ def rendercurses():
 				case "Unexpe":
 					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(2))
 				case "Timed ":
+					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(4))
+				case "Ignori":
 					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(4))
 		except:
 			# FIXME: Don't crash if curses fails to print the line, just check the log so see the problem

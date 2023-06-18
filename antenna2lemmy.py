@@ -48,14 +48,16 @@ MEDIA_SKIP_ON_FAIL = config["script-options"]["media_skip_on_fail"]
 # Decisions of comment migration
 MIGRATE_COMMENTS = config["script-options"]["migratecomments"]
 
-# Expand config values for this particular migration
-COMMUNITY_NAME = config["lemmy-conn"]["community"]
 
 # Load file of links provided
 try:
-	ORIGIN = sys.argv[1]
+	# we only get one argument
+	migrationinfo = sys.argv[1].split(",")
+	# Expand config values for this particular migration
+	COMMUNITY_NAME = migrationinfo[0]
+	ORIGIN = migrationinfo[1]
 except IndexError:
-	print("Provide a valid text file as argument to the program")
+	print("Provide a valid text file and target community as argument to the program")
 	sys.exit(0)
 try:
 	with open(ORIGIN, "r") as urlsfile:

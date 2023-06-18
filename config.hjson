@@ -22,9 +22,7 @@
 		"user": "archive_bot",
 		"password": "password96",
 		# Protocol to connect. Keep https unless is a local instance
-		"protocol": "http",
-		# Community target to post the content to
-		"community": "personal"
+		"protocol": "http"
 	},
 	"origin-conn": {
 		# How the requests will be identified to the origin

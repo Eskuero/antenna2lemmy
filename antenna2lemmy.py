@@ -45,6 +45,9 @@ MIGRATE_PICTURES = config["script-options"]["migrateimages"]
 MIGRATE_VIDEOS = config["script-options"]["migratevideos"]
 MEDIA_SKIP_ON_FAIL = config["script-options"]["media_skip_on_fail"]
 
+# Decisions of comment migration
+MIGRATE_COMMENTS = config["script-options"]["migratecomments"]
+
 # Expand config values for this particular migration
 COMMUNITY_NAME = config["lemmy-conn"]["community"]
 
@@ -198,6 +201,78 @@ def migratepost(url, COMMUNITY_ID):
 	log("Successful. op: 'Migrating post', url: '" + url, "info")
 	updatecounter('migrated_posts')
 
+	# Get the base list of comments and restore them if enabled
+	if MIGRATE_COMMENTS:
+		comments = page[1]["data"]["children"]
+		# Transverse the entire replies section adding everything with their corresponding parent
+		migratecomments(comments, BASE_API, AUTH, POST_ID)
+
+def migratecomments(comments, BASE_API, AUTH, POST_ID, PARENT_ID = None):
+	# Loop through each child comment
+	for comment in [comment["data"] for comment in comments if comment["kind"] != "more"]:
+		# Compose the comment content and attributes
+		try:
+			payload = {
+				'auth': AUTH,
+				'post_id': POST_ID,
+				'content': "",
+				"parent_id": PARENT_ID
+			}
+			result, payload['content'] = preparebody((comment["author"], comment["created_utc"]), comment["body"])
+		# If we failed to parse this comment simply move on
+		except:
+			log("Failed. op: 'Parsing comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', comment: '" + str(comment), "error")
+			updatecounter('failed_comments')
+			continue
+
+		# Actually create the comment and retrieve de post id
+		try:
+			response = requests.post(url = BASE_API + "/comment", json = payload)
+			COMMENT_ID = response.json()["comment_view"]["comment"]["id"]
+		# Received an invalid response that doesn't parse as Json'
+		except json.decoder.JSONDecodeError:
+			log("Failed. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', response: '" + response.text + "', payload: " + str(payload), "error")
+			updatecounter('failed_comments')
+			continue
+		except KeyError:
+			# If we failed with anything other than rate limit skip this one.
+			if response.json().get("error", "ok") != "rate_limit_error":
+				log("Failed. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', response: '" + response.text + "', payload: " + str(payload), "error")
+				updatecounter('failed_comments')
+				continue
+			# If we are rate limited retry in timeouts of 30 seconds
+			while (response.json().get("error", "ok") == "rate_limit_error"):
+				log("Timed out on POST request to Lemmy. Waiting 30 seconds before retry.")
+				log("Timed out and waiting 30 seconds. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', payload: " + str(payload), "warning")
+				time.sleep(30)
+				try:
+					response = requests.post(url = BASE_API + "/comment", json = payload)
+					COMMENT_ID = response.json()["comment_view"]["comment"]["id"]
+				# If we failed without rate limit again we break this loop and stop trying
+				except KeyError:
+					if response.json().get("error", "ok") != "rate_limit_error":
+						log("Failed. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', response: '" + response.text + "', payload: " + str(payload), "error")
+						updatecounter('failed_comments')
+						break
+				except:
+					log("Failed. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', response: '" + response.text + "', payload: " + str(payload), "error")
+					updatecounter('failed_comments')
+					break
+		except:
+			log("Failed. op: 'Migrating comment', POST_ID: '" + str(POST_ID) + "', PARENT_ID: '" + str(PARENT_ID) + "', response: '" + response.text + "', payload: " + str(payload), "error")
+			updatecounter('failed_comments')
+			continue
+
+		# If we arrived here it means the comment succesfully migrated
+		updatecounter('migrated_comments')
+
+		# Recurse again if the comment has more children replies
+		if comment["replies"]:
+			# NOTICE: DO NOT ENABLE THREADING FOR COMMENTS YOU MIGHT CRASH YOUR INSTANCE
+			# thread = threading.Thread(target = migratecomments, args=(comment["replies"]["data"]["children"], BASE_API, AUTH, POST_ID, COMMENT_ID), kwargs={})
+			# thread.start()
+			migratecomments(comment["replies"]["data"]["children"], BASE_API, AUTH, POST_ID, COMMENT_ID)
+
 def preparebody(credits, content):
 	# Always give credits to the original poster and jump line
 	credits = ">*originally posted by /u/" + credits[0] + " on " + str(datetime.datetime.fromtimestamp(credits[1])) + "*\n\n"
@@ -341,6 +416,8 @@ def rendercurses():
 	stdscr.addstr(2, 30, f"Failed posts: {interfacevars['failed_posts']}", curses.color_pair(2))
 	stdscr.addstr(3, 0, f"Media migrated: {interfacevars['migrated_media']}", curses.color_pair(1))
 	stdscr.addstr(3, 30, f"Failed media: {interfacevars['failed_media']}", curses.color_pair(2))
+	stdscr.addstr(4, 0, f"Comments migrated: {interfacevars['migrated_comments']}", curses.color_pair(1))
+	stdscr.addstr(4, 30, f"Failed comments: {interfacevars['failed_comments']}", curses.color_pair(2))
 
 	# Calculate the days, hours, minutes, and seconds
 	current_time = time.time()
@@ -351,9 +428,9 @@ def rendercurses():
 	minutes, seconds = divmod(remainder, 60)
 
 	# Print the current runtime
-	stdscr.addstr(4, 0, f"Runtime: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds.", curses.color_pair(5))
+	stdscr.addstr(5, 0, f"Runtime: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds.", curses.color_pair(5))
 	# Print the current total threads
-	stdscr.addstr(4, 60, f"Threads: {str(len(threading.enumerate()))}", curses.color_pair(4))
+	stdscr.addstr(5, 60, f"Threads: {str(len(threading.enumerate()))}", curses.color_pair(4))
 
 	# Calculate the height for the second section
 	second_section_height = screen_height - first_section_height
@@ -393,6 +470,8 @@ else:
 		"failed_posts": 0,
 		"migrated_media": 0,
 		"failed_media": 0,
+		"migrated_comments": 0,
+		"failed_comments": 0,
 		"error_output": []
 	}
 	# Initialize the curses screen
@@ -412,7 +491,7 @@ else:
 	# Calculate the height for the first section (10% of the screen height)
 	screen_height, screen_width = stdscr.getmaxyx()
 	# Define the height for the first section (4 rows)
-	first_section_height = 5
+	first_section_height = 6
 
 	# Start the migration
 	thread = threading.Thread(target=main, args=(), kwargs={})

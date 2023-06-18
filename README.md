@@ -24,5 +24,3 @@ Now you need to add as many URL of posts to a text file, one on each new line. T
 
  - Obviously Lemmy API doesn't allow to specify a score for a post on creation so restoring a original ranking is not possible. We could modify specify the amount of votes it has on the database after creation and then upvote it once via API but I'm unsure it would be satisfactory for already federating communities.
  - The same happens for creation dates. But this is probably never meant to be updated so modifying it once on the database would mean nothing for federation.
- - Comments. Out of scope. You can't probably have permission of all people that may have commented on your posts for those to be cloned onto another site.
-

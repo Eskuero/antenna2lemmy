@@ -12,6 +12,8 @@
 		"migratevideos": true,
 		# Whether to skip the post if we failed to migrate media or to the contrary simply keep the old link.
 		"media_skip_on_fail": true
+		# Whether to parse and migrate comments
+		"migratecomments": true
 	},
 	"lemmy-conn": {
 		# Hostname where Lemmy is located

@@ -365,15 +365,15 @@ def rendercurses():
 		try:
 			match line[:6]:
 				case "Succes":
-					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(1))
+					stdscr.addstr(i + first_section_height + 1, 0, line[:screen_width], curses.color_pair(1))
 				case "Failed":
-					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(2))
+					stdscr.addstr(i + first_section_height + 1, 0, line[:screen_width], curses.color_pair(2))
 				case "Unexpe":
-					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(2))
+					stdscr.addstr(i + first_section_height + 1, 0, line[:screen_width], curses.color_pair(2))
 				case "Timed ":
-					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(4))
+					stdscr.addstr(i + first_section_height + 1, 0, line[:screen_width], curses.color_pair(4))
 				case "Ignori":
-					stdscr.addstr(i + first_section_height + 1, 0, line, curses.color_pair(4))
+					stdscr.addstr(i + first_section_height + 1, 0, line[:screen_width], curses.color_pair(4))
 		except:
 			# FIXME: Don't crash if curses fails to print the line, just check the log so see the problem
 			pass
